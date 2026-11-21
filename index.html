@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>eBay Shipping Rate Planner</title>
+  <link rel="stylesheet" href="planner.css">
+  <script type="module" src="browser.mjs"></script>
+</head>
+<body>
+  <header>
+    <h1>eBay Shipping Rate Planner</h1>
+    <p>Turn your postage quotes into a policy base and regional surcharges. Calculations stay in your browser.</p>
+    <div class="actions">
+      <button type="button" id="example">Load example</button>
+      <label class="file">Open input JSON <input type="file" id="import" accept=".json,application/json"></label>
+    </div>
+    <p id="import-error" role="alert"></p>
+  </header>
+  <main>
+    <form id="planner">
+      <fieldset>
+        <legend>Shipping settings</legend>
+        <div class="fields">
+          <label>Ship-from ZIP <input name="origin" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" required></label>
+          <label>eBay fee on shipping (%) <input name="fee" type="number" min="0" max="99.99" step="0.01" required></label>
+          <label>Round up to ($) <input name="increment" type="number" min="0.01" max="10000" step="0.01" value="0.25" required></label>
+        </div>
+      </fieldset>
+      <div id="packages"></div>
+      <div class="actions">
+        <button type="button" id="add">Add package class</button>
+        <button type="submit" class="primary">Calculate rates</button>
+      </div>
+      <p id="calculation-error" role="alert"></p>
+    </form>
+    <section id="results" aria-label="Shipping rate results" hidden>
+      <h2>Shipping rates</h2>
+      <div id="plan-output"></div>
+      <div class="actions">
+        <button type="button" id="save-plan">Download Seller Hub worksheet</button>
+        <button type="button" id="save-input">Download input JSON</button>
+      </div>
+    </section>
+  </main>
+  <template id="package-template">
+    <fieldset class="package">
+      <legend>Package class</legend>
+      <div class="fields">
+        <label>Class, packed weight and size <input name="className" placeholder="8 oz · 14 × 10 × 1 in mailer" required></label>
+        <label>Packing materials ($) <input name="packing" type="number" min="0" max="10000" step="0.01" value="0.25" required></label>
+        <label>Baseline eBay row <input name="baseline" placeholder="Florida" required></label>
+        <label>Baseline ZIPs (optional) <input name="baselineZips" placeholder="32801, 33602"></label>
+      </div>
+      <label>Postage quotes
+        <span class="help">One per line. Enter ZIP, exact eBay row, label cost in dollars, and optional shipment count. Separate values with commas or tabs. Use tabs if a row name includes a comma. Use the same service and packed dimensions throughout this class.</span>
+        <textarea name="quotes" rows="5" required placeholder="32801, Florida, 5.73, 8&#10;90210, California, 6.85, 2"></textarea>
+      </label>
+      <details>
+        <summary>Compare an existing table or seasonal base</summary>
+        <div class="fields">
+          <label>Current base ($) <input name="currentBase" type="number" min="0" max="10000" step="0.01"></label>
+          <label>Trial base ($) <input name="trialBase" type="number" min="0" max="10000" step="0.01"></label>
+        </div>
+        <label>Existing surcharges
+          <span class="help">One per line. Enter exact eBay row and surcharge in dollars. Omitted quoted rows are treated as a $0 surcharge.</span>
+          <textarea name="surcharges" rows="3" placeholder="California, 1.25"></textarea>
+        </label>
+      </details>
+      <p class="receipt-info" hidden></p>
+      <button class="remove" type="button">Remove class</button>
+    </fieldset>
+  </template>
+  <noscript><p>This planner needs JavaScript to calculate your rates.</p></noscript>
+</body>
+</html>
