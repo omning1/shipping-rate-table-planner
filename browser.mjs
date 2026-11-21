@@ -11,7 +11,7 @@ const importError = byId('import-error');
 const importedReceipts = new WeakMap();
 let latest;
 
-const dollars = cents => '$' + (cents / 100).toFixed(2);
+const dollars = cents => cents < 0 ? '-$' + (-cents / 100).toFixed(2) : '$' + (cents / 100).toFixed(2);
 const field = (scope, name) => scope.querySelector('[name="' + name + '"]');
 
 function cents(value, label) {
@@ -166,6 +166,22 @@ function showPlan(plan) {
     section.append(element('p', tested
       ? 'Proposed rates cover ' + tested.covered + '/' + tested.count + ' held-out labels.'
       : 'Coverage is based on quotes. Add actual label evidence with the input JSON to check real costs.'));
+    const exposure = group.sampleExposure;
+    section.append(element('h4', 'Most exposed sampled ZIPs'),
+      element('p', 'Estimated shortfalls after fees and packing: proposed ' + exposure.undercoveredProposed + '/' + exposure.quoteCount +
+        (exposure.undercoveredCurrent === null ? '' : ', current ' + exposure.undercoveredCurrent + '/' + exposure.quoteCount) +
+        (exposure.undercoveredTrial === null ? '' : ', trial ' + exposure.undercoveredTrial + '/' + exposure.quoteCount) +
+        '. Showing the 25 worst sampled ZIPs at most. Quotes are not paid labels or a complete rural ZIP inventory.'));
+    const quoteHeaders = ['ZIP', 'eBay row', 'Label quote', 'Proposed buyer pays', 'Proposed after costs'];
+    if (exposure.undercoveredCurrent !== null) quoteHeaders.push('Current buyer pays', 'Current after costs');
+    if (exposure.undercoveredTrial !== null) quoteHeaders.push('Trial buyer pays', 'Trial after costs');
+    section.append(table(quoteHeaders, exposure.worst.map(row => {
+      const cells = [row.zip, row.region, dollars(row.labelCents), dollars(row.proposedBuyerChargeCents),
+        dollars(row.proposedContributionCents)];
+      if (row.currentContributionCents !== null) cells.push(dollars(row.currentBuyerChargeCents), dollars(row.currentContributionCents));
+      if (row.trialContributionCents !== null) cells.push(dollars(row.trialBuyerChargeCents), dollars(row.trialContributionCents));
+      return cells;
+    })));
     if (group.minimumBaseForQuoteTargetsCents !== null) {
       section.append(element('p', 'Base needed to reach all sampled 90th-percentile targets with existing surcharges ' +
         dollars(group.minimumBaseForQuoteTargetsCents)));

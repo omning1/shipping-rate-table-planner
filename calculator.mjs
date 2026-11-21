@@ -113,9 +113,31 @@ export function planRates(input) {
       return { region: row.region, surchargeCents, buyerChargeCents,
         quoteTargetShortfallCents: Math.max(0, gross(row.p90QuoteCents, packingCents) - buyerChargeCents) };
     });
+    const proposedSurcharges = new Map(regions.map(row => [row.region, row.surchargeCents]));
+    const exposureRows = quotes.map(({ zip, region, cents }) => {
+      const contribution = charge => Math.floor(charge * keepBps / 10_000) - cents - packingCents;
+      const proposedCharge = suggestedBaseCents + proposedSurcharges.get(region);
+      const currentCharge = current === null ? null : current.baseCents + (currentSurcharges.get(region) ?? 0);
+      const trialCharge = candidateBaseCents === undefined ? null : candidateBaseCents + (currentSurcharges.get(region) ?? 0);
+      return { zip, region, labelCents: cents, proposedBuyerChargeCents: proposedCharge,
+        proposedContributionCents: contribution(proposedCharge),
+        currentBuyerChargeCents: currentCharge,
+        currentContributionCents: currentCharge === null ? null : contribution(currentCharge),
+        trialBuyerChargeCents: trialCharge,
+        trialContributionCents: trialCharge === null ? null : contribution(trialCharge) };
+    });
+    const sampleExposure = {
+      quoteCount: exposureRows.length,
+      undercoveredProposed: exposureRows.filter(row => row.proposedContributionCents < 0).length,
+      undercoveredCurrent: current === null ? null : exposureRows.filter(row => row.currentContributionCents < 0).length,
+      undercoveredTrial: candidateBaseCents === undefined ? null : exposureRows.filter(row => row.trialContributionCents < 0).length,
+      worst: exposureRows.sort((a, b) => Math.min(a.proposedContributionCents, a.currentContributionCents ?? Infinity,
+        a.trialContributionCents ?? Infinity) - Math.min(b.proposedContributionCents, b.currentContributionCents ?? Infinity,
+        b.trialContributionCents ?? Infinity)).slice(0, 25),
+    };
     return { name, baselineRow, baselineQuoteCents: Math.round(baselineQuoteCents),
       baselineReceiptCents: baselineReceiptCents === null ? null : Math.round(baselineReceiptCents),
-      suggestedBaseCents, regions, minimumBaseForQuoteTargetsCents,
+      suggestedBaseCents, regions, sampleExposure, minimumBaseForQuoteTargetsCents,
       proposedBacktest: backtest(suggestedBaseCents, new Map(regions.map(row => [row.region, row.surchargeCents]))),
       baseOnlyBacktest: current === null ? null : backtest(suggestedBaseCents, currentSurcharges),
       currentBacktest: current === null ? null : backtest(current.baseCents, currentSurcharges),
@@ -143,6 +165,23 @@ export function renderSellerHubGuide(plan) {
     lines.push('', c.proposedBacktest
       ? `Held-out receipts covered **${c.proposedBacktest.covered}/${c.proposedBacktest.count}**. Screening thresholds ${c.proposedBacktest.meetsThresholds ? 'met' : 'missed'}.`
       : 'No held-out receipts supplied. Coverage remains unverified.', '');
+    const exposure = c.sampleExposure;
+    lines.push(`### Most exposed sampled ZIPs (${exposure.worst.length} of ${exposure.quoteCount})`, '',
+      `Estimated shortfalls after the fee and packing assumption: proposed ${exposure.undercoveredProposed}/${exposure.quoteCount}` +
+      (exposure.undercoveredCurrent === null ? '' : `; current ${exposure.undercoveredCurrent}/${exposure.quoteCount}`) +
+      (exposure.undercoveredTrial === null ? '' : `; trial ${exposure.undercoveredTrial}/${exposure.quoteCount}`) + '.', '',
+      '| ZIP | eBay row | Label quote | Proposed buyer charge | Proposed contribution |' +
+      (exposure.undercoveredCurrent === null ? '' : ' Current buyer charge | Current contribution |') +
+      (exposure.undercoveredTrial === null ? '' : ' Trial buyer charge | Trial contribution |'),
+      '| --- | --- | ---: | ---: | ---: |' +
+      (exposure.undercoveredCurrent === null ? '' : ' ---: | ---: |') +
+      (exposure.undercoveredTrial === null ? '' : ' ---: | ---: |'));
+    for (const row of exposure.worst) {
+      lines.push(`| ${row.zip} | ${label(row.region)} | ${dollars(row.labelCents)} | ${dollars(row.proposedBuyerChargeCents)} | ${dollars(row.proposedContributionCents)} |` +
+        (row.currentContributionCents === null ? '' : ` ${dollars(row.currentBuyerChargeCents)} | ${dollars(row.currentContributionCents)} |`) +
+        (row.trialContributionCents === null ? '' : ` ${dollars(row.trialBuyerChargeCents)} | ${dollars(row.trialContributionCents)} |`));
+    }
+    lines.push('', 'These are sampled postage quotes, not actual paid labels or a complete rural ZIP inventory.', '');
     if (c.minimumBaseForQuoteTargetsCents !== null) {
       lines.push(`Lowest base on the selected rounding increment that covers every quoted row target with existing surcharges **${dollars(c.minimumBaseForQuoteTargetsCents)}**`, '');
     }
