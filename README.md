@@ -16,6 +16,12 @@ The suggested base covers the larger of the baseline quote average and supplied 
 
 The fee-adjusted results are an **economic comparison**, not a statement of what eBay permits you to charge as shipping or handling. [eBay's shipping policy](https://www.ebay.com/help/policies/listing-policies/shipping-policy?id=5035) ties those charges to incurred postage and handling costs; its [shipping setup guide](https://www.ebay.com/help/selling/setting-shipping-options/setting-shipping-options?id=4089) describes calculated handling as covering packing and materials. Enter actual package costs and review buyer charges against that policy. If a calculated rate passes through postage but the selling fee leaves a shortfall, account for it in overall item pricing rather than assuming it is an additional handling cost.
 
+## Check eBay's current Geo ZIP group
+
+With Node.js installed, run `node geo-lookup.mjs 92328 10001 32801` from this repository. The command fetches [eBay's published ZIP reference](https://pages.ebay.com/usps_geo_based_pricing/) once, validates the three published group counts and unique ZIP membership, then reports B, C, D, or `unlisted` for each ZIP you supplied. It keeps leading zeroes and does not send your queried ZIPs to eBay: the matching happens locally after the reference page is downloaded. Run it again when eBay updates the list.
+
+This helps you find expensive examples to quote and test in the worksheet. It cannot make the flat eBay rate table charge a special amount to one of these ZIP groups; the Seller Hub table editor still selects geographic regions, states, or subdivisions.
+
 ## Data and source
 
 The four-file browser app has no account connection or backend. It reads imported JSON in the browser and runs its calculations locally. Downloaded worksheets stay on your device. The example contains invented prices. Do not upload personal order or buyer data to this repository.
