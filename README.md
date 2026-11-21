@@ -12,6 +12,8 @@ Enter one package class for each packed weight ceiling, outer dimensions, and se
 
 The suggested base covers the larger of the baseline quote average and supplied training label average after fees and packing. Each suggested surcharge targets the weighted 90th percentile quote for its table row. The current-table section shows the lowest base that would cover those sampled row targets with your existing surcharges. Quotes and held-out label receipts are planning evidence. Verify your saved Seller Hub table and buyer prices before assigning a policy across listings.
 
+The fee-adjusted results are an **economic comparison**, not a statement of what eBay permits you to charge as shipping or handling. [eBay's shipping policy](https://www.ebay.com/help/policies/listing-policies/shipping-policy?id=5035) ties those charges to incurred postage and handling costs; its [shipping setup guide](https://www.ebay.com/help/selling/setting-shipping-options/setting-shipping-options?id=4089) describes calculated handling as covering packing and materials. Enter actual package costs and review buyer charges against that policy. If a calculated rate passes through postage but the selling fee leaves a shortfall, account for it in overall item pricing rather than assuming it is an additional handling cost.
+
 ## Data and source
 
 The four-file browser app has no account connection or backend. It reads imported JSON in the browser and runs its calculations locally. Downloaded worksheets stay on your device. The example contains invented prices. Do not upload personal order or buyer data to this repository.
