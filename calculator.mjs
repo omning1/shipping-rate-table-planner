@@ -37,14 +37,15 @@ export function planRates(input) {
     requireValue(Array.isArray(quotes) && quotes.length > 0 && quotes.length <= 50_000, `${name}: supply current quotes.`);
     const zipSet = new Set();
     const byRegion = new Map();
-    for (const { zip, region, cents, weight = 1 } of quotes) {
+    for (const { zip, region, cents, weight = 1, geoGroup } of quotes) {
       requireValue(typeof zip === 'string' && /^\d{5}$/.test(zip) && !zipSet.has(zip) &&
         typeof region === 'string' && region.trim() && money(cents) && cents > 0 &&
-        Number.isSafeInteger(weight) && weight > 0 && weight <= 100_000,
+        Number.isSafeInteger(weight) && weight > 0 && weight <= 100_000 &&
+        (geoGroup === undefined || ['B', 'C', 'D', 'unlisted'].includes(geoGroup)),
       `${name}: invalid or duplicate quote.`);
       zipSet.add(zip);
       const regionQuotes = byRegion.get(region) ?? [];
-      regionQuotes.push({ zip, cents, weight });
+      regionQuotes.push({ zip, cents, weight, geoGroup });
       byRegion.set(region, regionQuotes);
     }
     const baselineRegion = byRegion.get(baselineRow);
@@ -118,20 +119,32 @@ export function planRates(input) {
         quoteTargetShortfallCents: Math.max(0, gross(row.p90QuoteCents, packingCents) - buyerChargeCents) };
     });
     const proposedSurcharges = new Map(regions.map(row => [row.region, row.surchargeCents]));
-    const exposureRows = quotes.map(({ zip, region, cents }) => {
+    const exposureRows = quotes.map(({ zip, region, cents, weight = 1, geoGroup }) => {
       const contribution = charge => Math.floor(charge * keepBps / 10_000) - cents - packingCents;
       const proposedCharge = suggestedBaseCents + proposedSurcharges.get(region);
       const currentBuyerCharge = current === null ? null : currentCharge(current.baseCents, region);
       const trialCharge = candidateBaseCents === undefined ? null : currentCharge(candidateBaseCents, region);
-      return { zip, region, labelCents: cents, proposedBuyerChargeCents: proposedCharge,
+      return { zip, region, weight, geoGroup: geoGroup ?? null, labelCents: cents, proposedBuyerChargeCents: proposedCharge,
         proposedContributionCents: contribution(proposedCharge),
         currentBuyerChargeCents: currentBuyerCharge,
         currentContributionCents: currentBuyerCharge === null ? null : contribution(currentBuyerCharge),
         trialBuyerChargeCents: trialCharge,
         trialContributionCents: trialCharge === null ? null : contribution(trialCharge) };
     });
+    const geoGroups = ['unlisted', 'B', 'C', 'D'].flatMap(group => {
+      const rows = exposureRows.filter(row => row.geoGroup === group);
+      if (!rows.length) return [];
+      const undercovered = key => rows.filter(row => row[key] < 0).length;
+      return [{ group, quoteCount: rows.length, weightedCount: rows.reduce((sum, row) => sum + row.weight, 0),
+        weightedMeanLabelCents: Math.round(average(rows.map(row => ({ cents: row.labelCents, weight: row.weight })))),
+        undercoveredProposed: undercovered('proposedContributionCents'),
+        undercoveredCurrent: current === null ? null : undercovered('currentContributionCents'),
+        undercoveredTrial: candidateBaseCents === undefined ? null : undercovered('trialContributionCents'),
+        worstCurrentShortfallCents: current === null ? null : Math.max(0, ...rows.map(row => -row.currentContributionCents)) }];
+    });
     const sampleExposure = {
       quoteCount: exposureRows.length,
+      geoGroups,
       undercoveredProposed: exposureRows.filter(row => row.proposedContributionCents < 0).length,
       undercoveredCurrent: current === null ? null : exposureRows.filter(row => row.currentContributionCents < 0).length,
       undercoveredTrial: candidateBaseCents === undefined ? null : exposureRows.filter(row => row.trialContributionCents < 0).length,
@@ -172,18 +185,27 @@ export function renderSellerHubGuide(plan) {
       : 'No held-out receipts supplied. Coverage remains unverified.', '');
     if (c.currentMode === 'item') lines.push('The existing eBay table uses fixed Item rates. Editing only its policy base leaves these quoted regional buyer charges unchanged. Save a Surcharge-mode table or update the Item rows to change them.', '');
     const exposure = c.sampleExposure;
+    if (exposure.geoGroups.length) {
+      lines.push('### eBay published Geo group exposure', '',
+        '| Geo group | Quoted ZIPs | Mean quoted postage | Proposed shortfalls | Current shortfalls |',
+        '| --- | ---: | ---: | ---: | ---: |');
+      for (const row of exposure.geoGroups) {
+        lines.push(`| ${row.group} | ${row.quoteCount} | ${dollars(row.weightedMeanLabelCents)} | ${row.undercoveredProposed}/${row.quoteCount} | ${row.undercoveredCurrent === null ? '—' : `${row.undercoveredCurrent}/${row.quoteCount}`} |`);
+      }
+      lines.push('', 'Geo groups describe eBay’s published ZIP reference, not selectable flat-table rows. A group with sampled shortfalls needs more ZIP quotes or calculated shipping before assigning this policy broadly.', '');
+    }
     lines.push(`### Most exposed sampled ZIPs (${exposure.worst.length} of ${exposure.quoteCount})`, '',
       `Estimated shortfalls after the fee and packing assumption: proposed ${exposure.undercoveredProposed}/${exposure.quoteCount}` +
       (exposure.undercoveredCurrent === null ? '' : `; current ${exposure.undercoveredCurrent}/${exposure.quoteCount}`) +
       (exposure.undercoveredTrial === null ? '' : `; trial ${exposure.undercoveredTrial}/${exposure.quoteCount}`) + '.', '',
-      '| ZIP | eBay row | Label quote | Proposed buyer charge | Proposed contribution |' +
+      '| ZIP | Geo group | eBay row | Label quote | Proposed buyer charge | Proposed contribution |' +
       (exposure.undercoveredCurrent === null ? '' : ' Current buyer charge | Current contribution |') +
       (exposure.undercoveredTrial === null ? '' : ' Trial buyer charge | Trial contribution |'),
-      '| --- | --- | ---: | ---: | ---: |' +
+      '| --- | --- | --- | ---: | ---: | ---: |' +
       (exposure.undercoveredCurrent === null ? '' : ' ---: | ---: |') +
       (exposure.undercoveredTrial === null ? '' : ' ---: | ---: |'));
     for (const row of exposure.worst) {
-      lines.push(`| ${row.zip} | ${label(row.region)} | ${dollars(row.labelCents)} | ${dollars(row.proposedBuyerChargeCents)} | ${dollars(row.proposedContributionCents)} |` +
+      lines.push(`| ${row.zip} | ${row.geoGroup ?? 'not checked'} | ${label(row.region)} | ${dollars(row.labelCents)} | ${dollars(row.proposedBuyerChargeCents)} | ${dollars(row.proposedContributionCents)} |` +
         (row.currentContributionCents === null ? '' : ` ${dollars(row.currentBuyerChargeCents)} | ${dollars(row.currentContributionCents)} |`) +
         (row.trialContributionCents === null ? '' : ` ${dollars(row.trialBuyerChargeCents)} | ${dollars(row.trialContributionCents)} |`));
     }

@@ -6,9 +6,9 @@ The optional current table and trial base let you check a seasonal base change. 
 
 ## Use
 
-Open [the browser planner](https://omning1.github.io/shipping-rate-table-planner/). You can also serve these four files locally with a static web server. For example, run `python3 -m http.server 8732` and open `http://127.0.0.1:8732/`.
+Open [the browser planner](https://omning1.github.io/shipping-rate-table-planner/). You can also serve this repository locally with a static web server. For example, run `python3 -m http.server 8732` and open `http://127.0.0.1:8732/`.
 
-Enter one package class for each packed weight ceiling, outer dimensions, and service. Use quotes for the exact package and service you ship. Give each quote a destination ZIP, the eBay table row that covers it, and a label cost. Use tabs to separate fields when a row name contains a comma. The optional fourth field is the historical shipment count for that ZIP. The example shows the input format.
+Enter one package class for each packed weight ceiling, outer dimensions, and service. Use quotes for the exact package and service you ship. Give each quote a destination ZIP, the eBay table row that covers it, and a label cost. Use tabs to separate fields when a row name contains a comma. The optional fourth field is the historical shipment count for that ZIP. A fifth field can hold eBay's published Geo group: `B`, `C`, `D`, or `unlisted`. The example shows the input format.
 
 Record the date and service used for every quote batch. Refresh quotes after carrier or marketplace price changes, including the end of temporary seasonal pricing. In **Surcharge** mode, editing the first-item base moves every modeled regional buyer charge by the same amount; if postage changes differ by region, recheck the surcharges before reusing the table. In **Item** mode, edit the fixed table rows or move verified listings to a Surcharge-mode table to change regional buyer charges.
 
@@ -19,6 +19,8 @@ The fee-adjusted results are an **economic comparison**, not a statement of what
 ## Check eBay's current Geo ZIP group
 
 With Node.js installed, run `node geo-lookup.mjs 92328 10001 32801` from this repository. The command fetches [eBay's published ZIP reference](https://pages.ebay.com/usps_geo_based_pricing/) once, validates the three published group counts and unique ZIP membership, then reports B, C, D, or `unlisted` for each ZIP you supplied. It keeps leading zeroes and does not send your queried ZIPs to eBay: the matching happens locally after the reference page is downloaded. Run it again when eBay updates the list.
+
+To classify every quote in a saved planner input, run `node geo-annotate.mjs shipping-input.json > geo-input.json`, then open `geo-input.json` in the browser planner. This fetches the same public reference once and adds the current group to each quoted ZIP locally. The output includes the reference retrieval time. The planner then shows shortfalls by Geo group and labels the worst sampled ZIPs. Your input file, ZIPs, label costs, and receipts are not sent with that fetch. Refresh the classification after eBay updates the list.
 
 This helps you find expensive examples to quote and test in the worksheet. It cannot make the flat eBay rate table charge a special amount to one of these ZIP groups; the Seller Hub table editor still selects geographic regions, states, or subdivisions.
 

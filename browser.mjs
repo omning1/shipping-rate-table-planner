@@ -10,6 +10,7 @@ const problem = byId('calculation-error');
 const importError = byId('import-error');
 const importedReceipts = new WeakMap();
 let latest;
+let geoReference;
 
 const dollars = cents => cents < 0 ? '-$' + (-cents / 100).toFixed(2) : '$' + (cents / 100).toFixed(2);
 const field = (scope, name) => scope.querySelector('[name="' + name + '"]');
@@ -56,8 +57,9 @@ function addPackage(entry = {}) {
   put('packing', (entry.packingCents ?? 25) / 100);
   put('baseline', entry.baselineRow);
   put('baselineZips', entry.baselineZips?.join(', '));
-  put('quotes', entry.quotes?.map(({ zip, region, cents: cost, weight }) =>
-    [zip, region, (cost / 100).toFixed(2), ...(weight === undefined ? [] : [weight])].join('\t')).join('\n'));
+  put('quotes', entry.quotes?.map(({ zip, region, cents: cost, weight, geoGroup }) =>
+    [zip, region, (cost / 100).toFixed(2), ...(weight === undefined && geoGroup === undefined ? [] : [weight ?? 1]),
+      ...(geoGroup === undefined ? [] : [geoGroup])].join('\t')).join('\n'));
   if (entry.current) {
     put('currentMode', entry.current.mode ?? 'surcharge');
     put('currentBase', entry.current.baseCents / 100);
@@ -90,9 +92,10 @@ function readPackage(section) {
   const read = name => field(section, name).value.trim();
   const name = read('className');
   const quotes = parseLines(read('quotes'), name, (cells, description) => {
-    if (cells.length < 3 || cells.length > 4) throw new Error(description + ' needs ZIP, row and postage.');
-    const [zip, region, cost, weight] = cells;
-    return { zip, region, cents: cents(cost, description), ...(weight && { weight: Number(weight) }) };
+    if (cells.length < 3 || cells.length > 5) throw new Error(description + ' needs ZIP, row and postage.');
+    const [zip, region, cost, weight, geoGroup] = cells;
+    return { zip, region, cents: cents(cost, description), ...(weight && { weight: Number(weight) }),
+      ...(geoGroup && { geoGroup }) };
   });
   const baselineZips = read('baselineZips').split(/[\s,]+/).filter(Boolean);
   const current = read('currentBase');
@@ -126,6 +129,7 @@ function readInput() {
     feeBps: cents(field(form, 'fee').value, 'eBay fee'),
     incrementCents: cents(field(form, 'increment').value, 'Rounding increment'),
     classes: Array.from(packages.children, readPackage),
+    ...(geoReference && { geoReference }),
   };
 }
 
@@ -134,6 +138,7 @@ function loadInput(input) {
   field(form, 'origin').value = input.originZip;
   field(form, 'fee').value = input.feeBps / 100;
   field(form, 'increment').value = (input.incrementCents ?? 25) / 100;
+  geoReference = input.geoReference;
   packages.replaceChildren();
   input.classes.forEach(addPackage);
   invalidate();
@@ -184,16 +189,24 @@ function showPlan(plan) {
     if (group.currentMode === 'item') section.append(element('p',
       'Existing table uses fixed Item rates. Editing only the policy base leaves these regional buyer charges unchanged. Use Surcharge mode for base-plus-zone pricing.'));
     const exposure = group.sampleExposure;
+    if (exposure.geoGroups.length) {
+      section.append(element('h4', 'eBay Geo group exposure'),
+        element('p', 'These ZIP groups classify sampled quotes. eBay’s flat table cannot target a Geo B, C or D ZIP directly.'));
+      section.append(table(['Geo group', 'Quoted ZIPs', 'Average label', 'Proposed shortfalls', 'Current shortfalls'],
+        exposure.geoGroups.map(row => [row.group, row.quoteCount, dollars(row.weightedMeanLabelCents),
+          row.undercoveredProposed + '/' + row.quoteCount,
+          row.undercoveredCurrent === null ? '—' : row.undercoveredCurrent + '/' + row.quoteCount])));
+    }
     section.append(element('h4', 'Most exposed sampled ZIPs'),
       element('p', 'Estimated shortfalls after fees and packing: proposed ' + exposure.undercoveredProposed + '/' + exposure.quoteCount +
         (exposure.undercoveredCurrent === null ? '' : ', current ' + exposure.undercoveredCurrent + '/' + exposure.quoteCount) +
         (exposure.undercoveredTrial === null ? '' : ', trial ' + exposure.undercoveredTrial + '/' + exposure.quoteCount) +
         '. Showing the 25 worst sampled ZIPs at most. Quotes are not paid labels or a complete rural ZIP inventory.'));
-    const quoteHeaders = ['ZIP', 'eBay row', 'Label quote', 'Proposed buyer pays', 'Proposed after costs'];
+    const quoteHeaders = ['ZIP', 'Geo group', 'eBay row', 'Label quote', 'Proposed buyer pays', 'Proposed after costs'];
     if (exposure.undercoveredCurrent !== null) quoteHeaders.push('Current buyer pays', 'Current after costs');
     if (exposure.undercoveredTrial !== null) quoteHeaders.push('Trial buyer pays', 'Trial after costs');
     section.append(table(quoteHeaders, exposure.worst.map(row => {
-      const cells = [row.zip, row.region, dollars(row.labelCents), dollars(row.proposedBuyerChargeCents),
+      const cells = [row.zip, row.geoGroup ?? 'not checked', row.region, dollars(row.labelCents), dollars(row.proposedBuyerChargeCents),
         dollars(row.proposedContributionCents)];
       if (row.currentContributionCents !== null) cells.push(dollars(row.currentBuyerChargeCents), dollars(row.currentContributionCents));
       if (row.trialContributionCents !== null) cells.push(dollars(row.trialBuyerChargeCents), dollars(row.trialContributionCents));
@@ -267,7 +280,7 @@ byId('example').addEventListener('click', () => {
         { zip: '44114', region: 'Ohio', cents: 600, weight: 8 },
         { zip: '43215', region: 'Ohio', cents: 610, weight: 2 },
         { zip: '90012', region: 'California', cents: 800, weight: 9 },
-        { zip: '92328', region: 'California', cents: 1100, weight: 1 },
+        { zip: '92328', region: 'California', cents: 1100, weight: 1, geoGroup: 'D' },
       ],
       current: { baseCents: 700, surchargeCents: { California: 100 } },
       candidateBaseCents: 750,
