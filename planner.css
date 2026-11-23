@@ -15,8 +15,8 @@ fieldset, #results { border: 1px solid #b8cbc4; border-radius: .75rem; backgroun
 legend { padding: 0 .45rem; font-weight: 700; }
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .9rem; }
 label { display: block; font-weight: 600; }
-input, textarea, button { font: inherit; box-sizing: border-box; }
-input, textarea { display: block; width: 100%; margin: .25rem 0 .6rem; padding: .45rem .6rem; border: 1px solid #829b93; border-radius: .3rem; color: inherit; background: #fff; }
+input, textarea, select, button { font: inherit; box-sizing: border-box; }
+input, textarea, select { display: block; width: 100%; margin: .25rem 0 .6rem; padding: .45rem .6rem; border: 1px solid #829b93; border-radius: .3rem; color: inherit; background: #fff; }
 textarea { resize: vertical; }
 .help { display: block; color: #405750; font-size: .88rem; font-weight: 400; margin: .2rem 0; }
 summary { cursor: pointer; font-weight: 650; margin: .65rem 0; }

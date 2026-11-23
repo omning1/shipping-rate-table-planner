@@ -63,10 +63,11 @@
         <div class="fields">
           <label>Current base ($) <input name="currentBase" type="number" min="0" max="10000" step="0.01"></label>
           <label>Trial base ($) <input name="trialBase" type="number" min="0" max="10000" step="0.01"></label>
+          <label>Existing eBay table mode <select name="currentMode"><option value="surcharge">Surcharge: added to base</option><option value="item">Item: fixed regional prices</option></select></label>
         </div>
-        <label>Existing surcharges
-          <span class="help">One per line. Enter exact eBay row and surcharge in dollars. Omitted quoted rows are treated as a $0 surcharge.</span>
-          <textarea name="surcharges" rows="3" placeholder="California, 1.25"></textarea>
+        <label><span class="existing-rates-label">Existing surcharges</span>
+          <span class="help existing-rates-help">One per line. Enter exact eBay row and surcharge in dollars. Omitted quoted rows are treated as a $0 surcharge.</span>
+          <textarea name="existingRates" rows="3" placeholder="California, 1.25"></textarea>
         </label>
       </details>
       <p class="receipt-info" hidden></p>

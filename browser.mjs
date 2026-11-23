@@ -40,6 +40,15 @@ function updateRemoveButtons() {
   });
 }
 
+function updateCurrentMode(section) {
+  const item = field(section, 'currentMode').value === 'item';
+  section.querySelector('.existing-rates-label').textContent = item ? 'Existing fixed Item rates' : 'Existing surcharges';
+  section.querySelector('.existing-rates-help').textContent = item
+    ? 'One per line. Enter each quoted eBay row and its absolute buyer charge. Supply every quoted row; a base edit leaves these prices fixed.'
+    : 'One per line. Enter exact eBay row and surcharge in dollars. Omitted quoted rows are treated as a $0 surcharge.';
+  field(section, 'existingRates').placeholder = item ? 'California, 8.25' : 'California, 1.25';
+}
+
 function addPackage(entry = {}) {
   const section = template.content.firstElementChild.cloneNode(true);
   const put = (name, value) => { field(section, name).value = value ?? ''; };
@@ -50,12 +59,16 @@ function addPackage(entry = {}) {
   put('quotes', entry.quotes?.map(({ zip, region, cents: cost, weight }) =>
     [zip, region, (cost / 100).toFixed(2), ...(weight === undefined ? [] : [weight])].join('\t')).join('\n'));
   if (entry.current) {
+    put('currentMode', entry.current.mode ?? 'surcharge');
     put('currentBase', entry.current.baseCents / 100);
     put('trialBase', entry.candidateBaseCents === undefined ? '' : entry.candidateBaseCents / 100);
-    put('surcharges', Object.entries(entry.current.surchargeCents).map(([region, cost]) =>
+    const existingRates = entry.current.mode === 'item' ? entry.current.itemCents : entry.current.surchargeCents;
+    put('existingRates', Object.entries(existingRates).map(([region, cost]) =>
       [region, (cost / 100).toFixed(2)].join('\t')).join('\n'));
     section.querySelector('details').open = true;
   }
+  updateCurrentMode(section);
+  field(section, 'currentMode').addEventListener('change', () => { updateCurrentMode(section); invalidate(); });
   if (entry.receiptBaselines?.length || entry.holdout?.length) {
     importedReceipts.set(section, { receiptBaselines: entry.receiptBaselines, holdout: entry.holdout });
     const notice = section.querySelector('.receipt-info');
@@ -84,22 +97,24 @@ function readPackage(section) {
   const baselineZips = read('baselineZips').split(/[\s,]+/).filter(Boolean);
   const current = read('currentBase');
   const trial = read('trialBase');
-  const surchargeText = read('surcharges');
+  const mode = read('currentMode');
+  const rateText = read('existingRates');
   const entry = {
     name, packingCents: cents(read('packing'), name + ' packing'),
     baselineRow: read('baseline'), quotes, ...importedReceipts.get(section),
   };
   if (baselineZips.length) entry.baselineZips = baselineZips;
-  if (!current && (surchargeText || trial)) throw new Error(name + ' needs a current base to compare the existing table.');
+  if (!current && (rateText || trial)) throw new Error(name + ' needs a current base to compare the existing table.');
   if (current) {
-    const pairs = parseLines(surchargeText, name + ' surcharges', (cells, description) => {
-      if (cells.length !== 2) throw new Error(description + ' needs the eBay row and surcharge.');
+    const pairs = parseLines(rateText, name + ' existing rates', (cells, description) => {
+      if (cells.length !== 2) throw new Error(description + ' needs the eBay row and rate.');
       return [cells[0], cents(cells[1], description)];
     });
     if (new Set(pairs.map(([region]) => region)).size !== pairs.length) {
-      throw new Error(name + ' has duplicate surcharge rows.');
+      throw new Error(name + ' has duplicate existing rate rows.');
     }
-    entry.current = { baseCents: cents(current, 'Current base'), surchargeCents: Object.fromEntries(pairs) };
+    entry.current = { baseCents: cents(current, 'Current base'), mode,
+      [mode === 'item' ? 'itemCents' : 'surchargeCents']: Object.fromEntries(pairs) };
   }
   if (trial) entry.candidateBaseCents = cents(trial, 'Trial base');
   return entry;
@@ -166,6 +181,8 @@ function showPlan(plan) {
     section.append(element('p', tested
       ? 'Proposed rates cover ' + tested.covered + '/' + tested.count + ' held-out labels.'
       : 'Coverage is based on quotes. Add actual label evidence with the input JSON to check real costs.'));
+    if (group.currentMode === 'item') section.append(element('p',
+      'Existing table uses fixed Item rates. Editing only the policy base leaves these regional buyer charges unchanged. Use Surcharge mode for base-plus-zone pricing.'));
     const exposure = group.sampleExposure;
     section.append(element('h4', 'Most exposed sampled ZIPs'),
       element('p', 'Estimated shortfalls after fees and packing: proposed ' + exposure.undercoveredProposed + '/' + exposure.quoteCount +
@@ -189,8 +206,8 @@ function showPlan(plan) {
     const trial = group.baseChangeTrial;
     if (trial) {
       section.append(element('h4', 'Trial base ' + dollars(trial.baseCents)),
-        table(['eBay row', 'Current surcharge', 'Buyer pays', 'Below target by'], trial.regions.map(row => [
-          row.region, dollars(row.surchargeCents), dollars(row.buyerChargeCents), dollars(row.quoteTargetShortfallCents),
+        table(['eBay row', group.currentMode === 'item' ? 'Fixed Item rate' : 'Current surcharge', 'Buyer pays', 'Below target by'], trial.regions.map(row => [
+          row.region, dollars(row.existingRateCents), dollars(row.buyerChargeCents), dollars(row.quoteTargetShortfallCents),
         ])));
     }
     output.append(section);

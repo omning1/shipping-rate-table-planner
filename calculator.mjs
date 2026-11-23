@@ -71,28 +71,33 @@ export function planRates(input) {
     const baselineQuoteCents = average(baseline);
     const baselineReceiptCents = average(receiptBaselines.map(r => ({ ...r, weight: 1 })));
     const suggestedBaseCents = round(gross(Math.max(baselineQuoteCents, baselineReceiptCents ?? 0), packingCents));
+    const currentMode = current?.mode ?? 'surcharge';
+    const currentCosts = current === null ? null : currentMode === 'item' ? current.itemCents : current.surchargeCents;
     if (current !== null) {
-      requireValue(money(current.baseCents) && current.surchargeCents && typeof current.surchargeCents === 'object' &&
-        !Array.isArray(current.surchargeCents) &&
-        Object.entries(current.surchargeCents).every(([region, cost]) => byRegion.has(region) && money(cost)),
-      `${name}: invalid current base or surcharge rows.`);
+      requireValue(money(current.baseCents) && (currentMode === 'item' || currentMode === 'surcharge') &&
+        currentCosts && typeof currentCosts === 'object' && !Array.isArray(currentCosts) &&
+        Object.entries(currentCosts).every(([region, cost]) => byRegion.has(region) && money(cost)) &&
+        (currentMode !== 'item' || [...byRegion.keys()].every(region => Object.hasOwn(currentCosts, region))),
+      `${name}: invalid current base or ${currentMode === 'item' ? 'fixed Item rates; supply every quoted row' : 'surcharge rows'}.`);
     }
     requireValue(candidateBaseCents === undefined || (current !== null && money(candidateBaseCents)),
       `${name}: a trial base requires valid cents and the current table.`);
+    const currentRates = current === null ? null : new Map(Object.entries(currentCosts));
+    const currentCharge = (base, region) => currentMode === 'item'
+      ? currentRates.get(region) : base + (currentRates.get(region) ?? 0);
     const regions = [...byRegion].map(([region, samples]) => {
       const p90QuoteCents = quantile(samples, 90);
       const target = gross(p90QuoteCents, packingCents);
       const surcharge = round(Math.max(0, target - suggestedBaseCents));
-      const currentSurcharge = current && (Object.hasOwn(current.surchargeCents, region) ? current.surchargeCents[region] : 0);
       return { region, quoteCount: samples.length, weightedMeanCents: Math.round(average(samples)), p90QuoteCents, surchargeCents: surcharge,
         maxPremiumAtSuggestedChargeCents: suggestedBaseCents + surcharge - gross(samples.reduce((min, row) => Math.min(min, row.cents), Infinity), packingCents),
         buyerChargeCents: suggestedBaseCents + surcharge,
-        changeNeededWithBaseOnly: current === null ? null : suggestedBaseCents + currentSurcharge < target };
+        changeNeededWithBaseOnly: current === null ? null : currentCharge(suggestedBaseCents, region) < target };
     });
-    function backtest(baseCents, surcharges) {
+    function backtest(baseCents, rates, mode = 'surcharge') {
       if (!holdout.length) return null;
       const margins = holdout.map(receipt => {
-        const charge = baseCents + (surcharges.get(receipt.region) ?? 0);
+        const charge = mode === 'item' ? rates.get(receipt.region) : baseCents + (rates.get(receipt.region) ?? 0);
         const net = Math.floor(charge * keepBps / 10_000);
         return { margin: net - receipt.cents - packingCents, premium: charge - gross(receipt.cents, packingCents) };
       });
@@ -104,25 +109,24 @@ export function planRates(input) {
         largestShortfallCents: margins.reduce((worst, row) => Math.max(worst, -row.margin), 0),
         meetsThresholds: totalMarginCents >= 0 && covered * 10 >= margins.length * 9 && Math.abs(medianPremiumCents) <= 100 };
     }
-    const currentSurcharges = current && new Map(Object.entries(current.surchargeCents));
-    const minimumBaseForQuoteTargetsCents = current === null ? null : round(Math.max(0, ...regions.map(row =>
-      gross(row.p90QuoteCents, packingCents) - (currentSurcharges.get(row.region) ?? 0))));
+    const minimumBaseForQuoteTargetsCents = current === null || currentMode === 'item' ? null : round(Math.max(0, ...regions.map(row =>
+      gross(row.p90QuoteCents, packingCents) - (currentRates.get(row.region) ?? 0))));
     const trialRows = candidateBaseCents === undefined ? null : regions.map(row => {
-      const surchargeCents = currentSurcharges.get(row.region) ?? 0;
-      const buyerChargeCents = candidateBaseCents + surchargeCents;
-      return { region: row.region, surchargeCents, buyerChargeCents,
+      const existingRateCents = currentRates.get(row.region) ?? 0;
+      const buyerChargeCents = currentCharge(candidateBaseCents, row.region);
+      return { region: row.region, existingRateCents, buyerChargeCents,
         quoteTargetShortfallCents: Math.max(0, gross(row.p90QuoteCents, packingCents) - buyerChargeCents) };
     });
     const proposedSurcharges = new Map(regions.map(row => [row.region, row.surchargeCents]));
     const exposureRows = quotes.map(({ zip, region, cents }) => {
       const contribution = charge => Math.floor(charge * keepBps / 10_000) - cents - packingCents;
       const proposedCharge = suggestedBaseCents + proposedSurcharges.get(region);
-      const currentCharge = current === null ? null : current.baseCents + (currentSurcharges.get(region) ?? 0);
-      const trialCharge = candidateBaseCents === undefined ? null : candidateBaseCents + (currentSurcharges.get(region) ?? 0);
+      const currentBuyerCharge = current === null ? null : currentCharge(current.baseCents, region);
+      const trialCharge = candidateBaseCents === undefined ? null : currentCharge(candidateBaseCents, region);
       return { zip, region, labelCents: cents, proposedBuyerChargeCents: proposedCharge,
         proposedContributionCents: contribution(proposedCharge),
-        currentBuyerChargeCents: currentCharge,
-        currentContributionCents: currentCharge === null ? null : contribution(currentCharge),
+        currentBuyerChargeCents: currentBuyerCharge,
+        currentContributionCents: currentBuyerCharge === null ? null : contribution(currentBuyerCharge),
         trialBuyerChargeCents: trialCharge,
         trialContributionCents: trialCharge === null ? null : contribution(trialCharge) };
     });
@@ -135,15 +139,16 @@ export function planRates(input) {
         a.trialContributionCents ?? Infinity) - Math.min(b.proposedContributionCents, b.currentContributionCents ?? Infinity,
         b.trialContributionCents ?? Infinity)).slice(0, 25),
     };
-    return { name, baselineRow, baselineQuoteCents: Math.round(baselineQuoteCents),
+    return { name, baselineRow, currentMode: current === null ? null : currentMode, baselineQuoteCents: Math.round(baselineQuoteCents),
       baselineReceiptCents: baselineReceiptCents === null ? null : Math.round(baselineReceiptCents),
       suggestedBaseCents, regions, sampleExposure, minimumBaseForQuoteTargetsCents,
       proposedBacktest: backtest(suggestedBaseCents, new Map(regions.map(row => [row.region, row.surchargeCents]))),
-      baseOnlyBacktest: current === null ? null : backtest(suggestedBaseCents, currentSurcharges),
-      currentBacktest: current === null ? null : backtest(current.baseCents, currentSurcharges),
+      baseOnlyBacktest: current === null ? null : backtest(suggestedBaseCents, currentRates, currentMode),
+      currentBacktest: current === null ? null : backtest(current.baseCents, currentRates, currentMode),
       ...(trialRows && { baseChangeTrial: {
         baseCents: candidateBaseCents, differenceCents: candidateBaseCents - current.baseCents,
-        regions: trialRows, backtest: backtest(candidateBaseCents, currentSurcharges),
+        baseEditMovesRates: currentMode === 'surcharge',
+        regions: trialRows, backtest: backtest(candidateBaseCents, currentRates, currentMode),
       } }) };
   }) };
 }
@@ -165,6 +170,7 @@ export function renderSellerHubGuide(plan) {
     lines.push('', c.proposedBacktest
       ? `Held-out receipts covered **${c.proposedBacktest.covered}/${c.proposedBacktest.count}**. Screening thresholds ${c.proposedBacktest.meetsThresholds ? 'met' : 'missed'}.`
       : 'No held-out receipts supplied. Coverage remains unverified.', '');
+    if (c.currentMode === 'item') lines.push('The existing eBay table uses fixed Item rates. Editing only its policy base leaves these quoted regional buyer charges unchanged. Save a Surcharge-mode table or update the Item rows to change them.', '');
     const exposure = c.sampleExposure;
     lines.push(`### Most exposed sampled ZIPs (${exposure.worst.length} of ${exposure.quoteCount})`, '',
       `Estimated shortfalls after the fee and packing assumption: proposed ${exposure.undercoveredProposed}/${exposure.quoteCount}` +
@@ -188,10 +194,10 @@ export function renderSellerHubGuide(plan) {
     if (c.baseChangeTrial) {
       const t = c.baseChangeTrial;
       lines.push(`### Trial base ${dollars(t.baseCents)} (change of ${dollars(t.differenceCents)})`, '',
-        '| eBay destination row | Existing surcharge | Estimated buyer charge | Below quoted target by |',
+        `| eBay destination row | Existing ${c.currentMode === 'item' ? 'fixed Item rate' : 'surcharge'} | Estimated buyer charge | Below quoted target by |`,
         '| --- | ---: | ---: | ---: |');
       for (const row of t.regions) {
-        lines.push(`| ${label(row.region)} | ${dollars(row.surchargeCents)} | ${dollars(row.buyerChargeCents)} | ${dollars(row.quoteTargetShortfallCents)} |`);
+        lines.push(`| ${label(row.region)} | ${dollars(row.existingRateCents)} | ${dollars(row.buyerChargeCents)} | ${dollars(row.quoteTargetShortfallCents)} |`);
       }
       lines.push('', t.backtest
         ? `Trial covers **${t.backtest.covered}/${t.backtest.count}** held-out receipts. Screening thresholds ${t.backtest.meetsThresholds ? 'met' : 'missed'}.`
