@@ -8,6 +8,8 @@ The optional current table and trial base let you check a seasonal base change. 
 
 Open [the browser planner](https://omning1.github.io/shipping-rate-table-planner/). You can also serve this repository locally with a static web server. For example, run `python3 -m http.server 8732` and open `http://127.0.0.1:8732/`.
 
+For the complete workflow from packed measurements and quotes through eBay's domestic Surcharge editor, buyer checks, and later base edits, follow the [setup guide](SETUP.md).
+
 Enter one package class for each packed weight ceiling, outer dimensions, and service. Use quotes for the exact package and service you ship. Give each quote a destination ZIP, the eBay table row that covers it, and a label cost. Use tabs to separate fields when a row name contains a comma. The optional fourth field is the historical shipment count for that ZIP. A fifth field can hold eBay's published Geo group: `B`, `C`, `D`, or `unlisted`. The example shows the input format.
 
 Record the date and service used for every quote batch. Refresh quotes after carrier or marketplace price changes, including the end of temporary seasonal pricing. In **Surcharge** mode, editing the first-item base moves every modeled regional buyer charge by the same amount; if postage changes differ by region, recheck the surcharges before reusing the table. In **Item** mode, edit the fixed table rows or move verified listings to a Surcharge-mode table to change regional buyer charges.
