@@ -8,6 +8,12 @@ Use a **fully packed** weight ceiling, outer length × width × height, and one 
 
 If you plan to use eBay's **calculated** shipping instead, eBay uses the listing's package weight, dimensions, buyer location, and selected service to calculate what the buyer sees. Accurate package details still matter. [eBay's shipping-calculator instructions](https://www.ebay.com/help/shipping-items/selling/using-shipping-calculator/setting-shipping-options?id=4178) describe this flow.
 
+### Books, recordings, and games
+
+Before building a Ground Advantage table, check whether the **entire packed parcel** qualifies for [USPS Media Mail](https://faq.usps.com/articles/Knowledge/What-is-Media-Mail-Book-Rate). Eligible books and recordings may use a separate Media Mail policy for the correct packed weight class. [USPS publishes Media Mail single-piece prices by weight](https://pe.usps.com/text/DMM300/Notice123.htm), rather than destination zone, so a regional surcharge table does not solve a Media Mail postage difference. Compare the buyer charge with postage, packing materials, and the fee on shipping; if you intentionally offer a low shipping charge, the item price must support the remaining cost.
+
+[USPS excludes video and board games from Media Mail](https://pe.usps.com/text/csr/PS-334.htm). Use the measured Ground Advantage workflow below for games, including the regional or ZIP-sensitive calculated option appropriate to the parcel. A title or category alone cannot verify the contents or final packed size.
+
 ## 2. Collect comparable postage quotes
 
 In [eBay's shipping calculator](https://www.ebay.com/shp/calc/rates), enter your ship-from ZIP and the exact packed class. Choose the same service for every route, and record the **discounted label price** you expect to buy, not the retail comparison price. Record the quote date. Use a mix of destinations you actually ship to, plus expensive test ZIPs within the same state or region. Include Florida or another nearby baseline, other continental regions, Alaska, Hawaii, Puerto Rico, and an APO/FPO destination when you serve them. Those lanes can behave differently.

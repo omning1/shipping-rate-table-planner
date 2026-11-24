@@ -8,7 +8,7 @@ The optional current table and trial base let you check a seasonal base change. 
 
 Open [the browser planner](https://omning1.github.io/shipping-rate-table-planner/). You can also serve this repository locally with a static web server. For example, run `python3 -m http.server 8732` and open `http://127.0.0.1:8732/`.
 
-For the complete workflow from packed measurements and quotes through eBay's domestic Surcharge editor, buyer checks, and later base edits, follow the [setup guide](SETUP.md).
+For the complete workflow from packed measurements and quotes through eBay's domestic Surcharge editor, buyer checks, and later base edits, follow the [setup guide](SETUP.md). It also explains when eligible books and recordings should use a separate Media Mail policy and why games need Ground Advantage.
 
 Enter one package class for each packed weight ceiling, outer dimensions, and service. Use quotes for the exact package and service you ship. Give each quote a destination ZIP, the eBay table row that covers it, and a label cost. Use tabs to separate fields when a row name contains a comma. The optional fourth field is the historical shipment count for that ZIP. A fifth field can hold eBay's published Geo group: `B`, `C`, `D`, or `unlisted`. The example shows the input format.
 
